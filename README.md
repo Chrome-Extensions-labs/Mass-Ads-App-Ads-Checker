@@ -7,7 +7,7 @@ A browser-native logging and validation toolkit for high-volume `ads.txt` / `app
 [![Chrome Store](https://img.shields.io/badge/platform-Chrome_Extension-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white)](https://chromewebstore.google.com/search/OstinUA)
 [![Chrome Portfolio](https://img.shields.io/badge/Chrome_Web_Store-Portfolio-34A853?style=for-the-badge&logo=google-chrome&logoColor=white)](https://ostinua.github.io/Chrome-Web-Store_Developer-List/)
 
-[![Version](https://img.shields.io/badge/version-2.6.3-30BA8F?style=for-the-badge)](./manifest.json)
+[![Version](https://img.shields.io/badge/version-2.7.0-30BA8F?style=for-the-badge)](./manifest.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1f6feb?style=for-the-badge)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-ff9800?style=for-the-badge)](./manifest.json)
 
@@ -28,7 +28,8 @@ A browser-native logging and validation toolkit for high-volume `ads.txt` / `app
 
 ## Features
 
-- High-throughput batch domain scanning with controlled concurrency for stable browser execution.
+- Dashboard-style popup UI with compact Standard/Bulk workflows and clearer control grouping.
+- High-throughput batch domain scanning with configurable per-mode concurrency (`1-20`) persisted in `localStorage`.
 - Multi-protocol endpoint probing sequence to maximize discovery success:
   - `https://www.<domain>/<fileType>`
   - `https://<domain>/<fileType>`
@@ -36,7 +37,7 @@ A browser-native logging and validation toolkit for high-volume `ads.txt` / `app
   - `http://<domain>/<fileType>`
 - Content-type sanity filtering to skip false-positive HTML error pages.
 - IAB-centric record parsing that counts only `DIRECT` and `RESELLER` rows as valid.
-- Real-time progress telemetry (`completed/total`) and status transitions (`Ready` -> `Processing` -> `Completed`).
+- Real-time progress telemetry with animated progress bar and rolling ETA (`Processed`, `Elapsed`, `ETA`, `Status`).
 - Downloadable CSV report artifact for BI ingestion, spreadsheet QA, or audit handoff.
 - Persistent UI personalization via theme state (`light` / `dark`) stored in `localStorage`.
 - Browser-side operation model that helps bypass server-side anti-bot behavior that blocks headless scripts.
@@ -236,12 +237,16 @@ const url = URL.createObjectURL(blob);
   - Values: `ads.txt` or `app-ads.txt`.
   - Effect: Changes endpoint suffix used in URL probing.
 
-- `batchSize` (defined in `assets/js/popup.js`)
-  - Current default: `2`.
-  - Effect: Controls number of concurrent domain checks.
+- `concurrency.standard` (`localStorage`)
+  - Default: `10` (range `1-20`, clamped on blur and run).
+  - Effect: Controls Standard Mode parallel request count.
+
+- `concurrency.bulk` (`localStorage`)
+  - Default: `15` (range `1-20`, clamped on blur and run).
+  - Effect: Controls Bulk Mode parallel request count.
 
 - Request timeout
-  - Current default: `20000` ms using `AbortController`.
+  - Current default: `7000` ms using `AbortController`.
   - Effect: Prevents long-hanging network calls.
 
 ### Environment Variables (`.env`)

@@ -6,95 +6,148 @@
   <link rel="stylesheet" href="assets/css/popup.css">
 </head>
 <body>
-  <div class="top-row">
-    <h3>Lines Checker</h3>
-    <div class="header-controls">
-      <button id="modeToggleBtn" class="mode-toggle-btn">Bulk Mode</button>
-      <button id="themeToggleBtn" class="theme-toggle-btn">Dark Theme</button>
+  <header class="app-header">
+    <div class="app-title-wrap">
+      <h1 class="app-title">Lines Checker</h1>
+      <span class="version-badge">v2.7.0</span>
     </div>
-  </div>
+    <div class="header-actions">
+      <div class="mode-switch" role="tablist" aria-label="Scan mode">
+        <button id="standardModeBtn" class="mode-btn" role="tab" aria-selected="true">Standard</button>
+        <button id="bulkModeBtn" class="mode-btn" role="tab" aria-selected="false">Bulk</button>
+      </div>
+      <button id="themeToggleBtn" class="icon-btn" aria-label="Toggle dark theme" title="Toggle dark theme">
+        <span class="theme-icon-sun" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        </span>
+        <span class="theme-icon-moon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </span>
+      </button>
+    </div>
+  </header>
 
-  <div id="standardModeView">
-    <textarea id="domainList" placeholder="Enter domains here or load from TXT file..."></textarea>
-
-    <div class="controls-row">
-      <input type="file" id="fileInput" accept=".txt" class="hidden-input">
-      <button id="loadFileBtn" class="btn-load">Load TXT</button>
-      <input type="file" id="csvFileInput" accept=".csv,.txt" class="hidden-input">
-      <button id="loadCsvBtn" class="btn-load">Load CSV</button>
+  <section class="config-panel" aria-label="Scan configuration">
+    <div class="control-group">
+      <label for="fileTypeSelect">File type</label>
       <select id="fileTypeSelect">
         <option value="app-ads.txt">app-ads.txt</option>
         <option value="ads.txt">ads.txt</option>
         <option value="both">ads.txt + app-ads.txt</option>
         <option value="url">Exact URL</option>
       </select>
-      <button id="checkBtn" class="btn-check">Run Check</button>
-      <button id="stopBtn" class="btn-stop">Stop</button>
     </div>
 
-    <div class="status-bar">
-      <span id="statusText">Ready</span>
-      <span id="progressText">0/0</span>
+    <div id="standardConcurrencyWrap" class="control-group concurrency-wrap">
+      <label for="standardConcurrencyInput" title="Number of domains checked at the same time. Higher values are faster but may cause memory pressure or trigger anti-bot rate limits on some networks. Recommended: 5–15.">Parallel requests <span class="hint">?</span></label>
+      <input id="standardConcurrencyInput" type="number" min="1" max="20" step="1" inputmode="numeric">
     </div>
 
-    <div class="table-container">
-      <table id="resultsTable">
-        <thead>
-          <tr>
-            <th class="col-url">File URL</th>
-            <th class="col-status">Status</th>
-            <th class="col-lines">Lines</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <div id="bulkConcurrencyWrap" class="control-group concurrency-wrap hidden-view">
+      <label for="bulkConcurrencyInput" title="Number of domains checked at the same time. Higher values are faster but may cause memory pressure or trigger anti-bot rate limits on some networks. Recommended: 5–15.">Parallel requests <span class="hint">?</span></label>
+      <input id="bulkConcurrencyInput" type="number" min="1" max="20" step="1" inputmode="numeric">
     </div>
 
-    <button id="downloadBtn" class="btn-download">Download CSV</button>
-  </div>
+    <div id="standardLoadGroup" class="button-group">
+      <input type="file" id="fileInput" accept=".txt" class="hidden-input">
+      <button id="loadFileBtn" class="btn btn-secondary">Load TXT</button>
+      <input type="file" id="csvFileInput" accept=".csv,.txt" class="hidden-input">
+      <button id="loadCsvBtn" class="btn btn-secondary">Load CSV</button>
+    </div>
 
-  <div id="bulkModeView" class="hidden-view">
-    <div class="controls-row">
+    <div id="bulkLoadGroup" class="button-group hidden-view">
       <input type="file" id="bulkFileInput" accept=".txt" class="hidden-input">
-      <button id="bulkLoadFileBtn" class="btn-load">Select File</button>
-      <select id="bulkInputTypeSelect">
+      <button id="bulkLoadFileBtn" class="btn btn-secondary">Load file</button>
+      <label class="compact-inline" for="bulkInputTypeSelect">Input</label>
+      <select id="bulkInputTypeSelect" class="compact-select">
         <option value="txt" selected>TXT</option>
         <option value="csv">CSV</option>
       </select>
-      <select id="bulkFileTypeSelect">
+      <label class="compact-inline" for="bulkFileTypeSelect">File type</label>
+      <select id="bulkFileTypeSelect" class="compact-select">
         <option value="app-ads.txt">app-ads.txt</option>
         <option value="ads.txt">ads.txt</option>
         <option value="both">ads.txt + app-ads.txt</option>
         <option value="url">Exact URL</option>
       </select>
-    </div>
 
-    <div class="controls-row">
-      <label for="bulkIncludeStatus" style="display:flex;align-items:center;gap:8px;color:var(--text-main);font-size:14px;">
+      <label class="bulk-status-toggle" for="bulkIncludeStatus">
         <input type="checkbox" id="bulkIncludeStatus" checked>
         Include status in CSV
       </label>
-      <button id="bulkCheckBtn" class="btn-check" disabled>Start Bulk Check</button>
-      <button id="bulkStopBtn" class="btn-stop">Stop</button>
     </div>
 
-    <div class="bulk-stats-box">
-      <div id="bulkFileStatus" class="bulk-file-status">No file selected</div>
-      <div class="bulk-row">
-        <div>
-          <div class="stat-title">Processed Domains</div>
-          <div class="stat-value" id="bulkProgressValue">0 / 0</div>
-        </div>
-        <div>
-          <div class="stat-title">Time Elapsed</div>
-          <div class="stat-value" id="bulkTimeValue">00:00</div>
+    <div class="run-slot">
+      <button id="checkBtn" class="btn btn-primary" aria-label="Run standard check">Run Check</button>
+      <button id="stopBtn" class="btn btn-stop" aria-label="Stop standard check">Stop</button>
+      <button id="bulkCheckBtn" class="btn btn-primary hidden-view" aria-label="Start bulk check" disabled>Start Bulk Check</button>
+      <button id="bulkStopBtn" class="btn btn-stop" aria-label="Stop bulk check">Stop</button>
+    </div>
+  </section>
+
+  <section class="progress-strip" aria-live="polite">
+    <div class="progress-track">
+      <div id="progressBarFill" class="progress-fill"></div>
+    </div>
+    <div id="progressMeta" class="progress-meta">Processed: 0 / 0 · Elapsed: 00:00 · ETA: 00:00 · Status: Ready</div>
+  </section>
+
+  <main>
+    <section id="standardModeView">
+      <div class="input-zone">
+        <label for="domainList">Domains / URLs</label>
+        <div class="textarea-wrap">
+          <textarea id="domainList" placeholder="Enter domains here or load from TXT/CSV file..."></textarea>
+          <span id="domainCountChip" class="domain-chip">0 domains</span>
         </div>
       </div>
-    </div>
 
-    <button id="bulkDownloadBtn" class="btn-download">Download CSV</button>
-    <button id="bulkDownloadTxtBtn" class="btn-download">Download TXT</button>
-  </div>
+      <div class="results-zone">
+        <div class="table-container">
+          <table id="resultsTable">
+            <thead>
+              <tr>
+                <th class="col-url">File URL</th>
+                <th class="col-status">Status</th>
+                <th class="col-lines">Lines</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="footer-actions">
+        <button id="downloadBtn" class="btn btn-outline">Download CSV</button>
+      </div>
+    </section>
+
+    <section id="bulkModeView" class="hidden-view">
+      <div class="bulk-file-status-wrap">
+        <span id="bulkFileStatus" class="bulk-file-status">No file selected</span>
+      </div>
+
+      <div class="stats-grid">
+        <article class="stat-card">
+          <div class="stat-title">Processed</div>
+          <div class="stat-value" id="bulkProgressValue">0 / 0</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-title">Elapsed</div>
+          <div class="stat-value" id="bulkTimeValue">00:00</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-title">ETA</div>
+          <div class="stat-value" id="bulkEtaValue">00:00</div>
+        </article>
+      </div>
+
+      <div class="footer-actions">
+        <button id="bulkDownloadBtn" class="btn btn-outline">Download CSV</button>
+        <button id="bulkDownloadTxtBtn" class="btn btn-outline">Download TXT</button>
+      </div>
+    </section>
+  </main>
 
   <script src="assets/js/popup.js"></script>
 </body>
