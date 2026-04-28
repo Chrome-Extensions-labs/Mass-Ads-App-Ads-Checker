@@ -7,7 +7,7 @@ A browser-native logging and validation toolkit for high-volume `ads.txt` / `app
 [![Chrome Store](https://img.shields.io/badge/platform-Chrome_Extension-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white)](https://chromewebstore.google.com/search/OstinUA)
 [![Chrome Portfolio](https://img.shields.io/badge/Chrome_Web_Store-Portfolio-34A853?style=for-the-badge&logo=google-chrome&logoColor=white)](https://ostinua.github.io/Chrome-Web-Store_Developer-List/)
 
-[![Version](https://img.shields.io/badge/version-2.7.0-30BA8F?style=for-the-badge)](./manifest.json)
+[![Version](https://img.shields.io/badge/version-2.7.1-30BA8F?style=for-the-badge)](./manifest.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1f6feb?style=for-the-badge)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-ff9800?style=for-the-badge)](./manifest.json)
 

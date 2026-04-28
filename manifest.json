@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mass Ads & App-Ads Checker",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "description": "Dashboard-style ads.txt and app-ads.txt checker with per-mode concurrency control, rolling ETA progress, and CSV/TXT exports.",
   "permissions": [
     "storage"

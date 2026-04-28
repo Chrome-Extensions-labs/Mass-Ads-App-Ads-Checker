@@ -238,7 +238,7 @@ input[type="number"] {
 }
 
 .compact-select {
-  width: 74px;
+  width: 100px;
 }
 
 .bulk-status-toggle {
@@ -379,7 +379,7 @@ textarea {
 
 .domain-chip {
   position: absolute;
-  right: var(--space-2);
+  right: var(--space-5);
   bottom: var(--space-2);
   font-size: 11px;
   color: var(--text-muted);
