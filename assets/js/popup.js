@@ -82,10 +82,43 @@ function countValidLines(content) {
 }
 
 function initPopup() {
+  const RATE_WINDOW = 5;
+
+  function clampConcurrency(value) {
+    const n = Number.parseInt(value, 10);
+    if (!Number.isFinite(n)) return 10;
+    return Math.min(20, Math.max(1, n));
+  }
+
+  function readConcurrency(mode) {
+    const stored = localStorage.getItem(`concurrency.${mode}`);
+    return clampConcurrency(stored ?? (mode === 'bulk' ? 15 : 10));
+  }
+
+  function writeConcurrency(mode, value) {
+    localStorage.setItem(`concurrency.${mode}`, String(clampConcurrency(value)));
+  }
+
+  function formatDuration(totalSeconds) {
+    const sec = Math.max(0, Number(totalSeconds) || 0);
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (h > 0) {
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
   const themeToggleBtn = document.getElementById('themeToggleBtn');
-  const modeToggleBtn = document.getElementById('modeToggleBtn');
+  const standardModeBtn = document.getElementById('standardModeBtn');
+  const bulkModeBtn = document.getElementById('bulkModeBtn');
   const standardModeView = document.getElementById('standardModeView');
   const bulkModeView = document.getElementById('bulkModeView');
+  const standardLoadGroup = document.getElementById('standardLoadGroup');
+  const bulkLoadGroup = document.getElementById('bulkLoadGroup');
+  const standardConcurrencyWrap = document.getElementById('standardConcurrencyWrap');
+  const bulkConcurrencyWrap = document.getElementById('bulkConcurrencyWrap');
 
   const checkBtn = document.getElementById('checkBtn');
   const stopBtn = document.getElementById('stopBtn');
@@ -97,8 +130,8 @@ function initPopup() {
   const domainInput = document.getElementById('domainList');
   const fileTypeSelect = document.getElementById('fileTypeSelect');
   const tableBody = document.querySelector('#resultsTable tbody');
-  const statusText = document.getElementById('statusText');
-  const progressText = document.getElementById('progressText');
+  const domainCountChip = document.getElementById('domainCountChip');
+  const standardConcurrencyInput = document.getElementById('standardConcurrencyInput');
 
   const bulkLoadFileBtn = document.getElementById('bulkLoadFileBtn');
   const bulkFileInput = document.getElementById('bulkFileInput');
@@ -112,6 +145,11 @@ function initPopup() {
   const bulkFileStatus = document.getElementById('bulkFileStatus');
   const bulkProgressValue = document.getElementById('bulkProgressValue');
   const bulkTimeValue = document.getElementById('bulkTimeValue');
+  const bulkEtaValue = document.getElementById('bulkEtaValue');
+  const bulkConcurrencyInput = document.getElementById('bulkConcurrencyInput');
+
+  const progressBarFill = document.getElementById('progressBarFill');
+  const progressMeta = document.getElementById('progressMeta');
 
   let results = [];
   let isScanning = false;
@@ -123,38 +161,131 @@ function initPopup() {
   let bulkStartTime = 0;
   let bulkResultsArray = [];
 
+  let batchTimings = [];
+  let scanStartTime = 0;
+  let scanContext = { total: 0, completed: 0, status: 'Ready', stopping: false, mode: 'standard' };
+
+  standardConcurrencyInput.value = String(readConcurrency('standard'));
+  bulkConcurrencyInput.value = String(readConcurrency('bulk'));
+
   applyTheme(currentTheme);
-  updateThemeBtnText(currentTheme);
   setModeByIndex(modeIndex);
+  updateDomainCounter();
+  updateProgressUI(0, 0, 'Ready', false, 'standard');
 
-  modeToggleBtn.addEventListener('click', () => {
-    if (isScanning) return;
-    modeIndex = (modeIndex + 1) % 2;
-    setModeByIndex(modeIndex);
-  });
+  function recordBatchTiming(completed) {
+    batchTimings.push({ completed, t: Date.now() });
+    if (batchTimings.length > RATE_WINDOW + 1) batchTimings.shift();
+  }
 
-  function setModeByIndex(index) {
-    standardModeView.style.display = index === 0 ? 'block' : 'none';
-    bulkModeView.style.display = index === 1 ? 'block' : 'none';
+  function estimateEtaSeconds(total, completed) {
+    if (batchTimings.length < 2 || completed >= total) return 0;
+    const first = batchTimings[0];
+    const last = batchTimings[batchTimings.length - 1];
+    const deltaCompleted = last.completed - first.completed;
+    const deltaMs = last.t - first.t;
+    if (deltaCompleted <= 0 || deltaMs <= 0) return 0;
+    const ratePerMs = deltaCompleted / deltaMs;
+    const remaining = total - completed;
+    return Math.ceil(remaining / ratePerMs / 1000);
+  }
 
-    if (index === 0) {
-      modeToggleBtn.innerText = 'Bulk Mode';
-    } else {
-      modeToggleBtn.innerText = 'Standard Mode';
+  function resetProgressTracking(mode, total, status) {
+    scanStartTime = Date.now();
+    batchTimings = [];
+    scanContext = { total, completed: 0, status, stopping: false, mode };
+    recordBatchTiming(0);
+    updateProgressUI(0, total, status, false, mode);
+  }
+
+  function updateProgressUI(completed, total, status, stopping = false, mode = 'standard') {
+    const elapsedSec = scanStartTime ? Math.floor((Date.now() - scanStartTime) / 1000) : 0;
+    const etaSec = estimateEtaSeconds(total, completed);
+    const pct = total > 0 ? Math.max(0, Math.min(100, (completed / total) * 100)) : 0;
+
+    progressBarFill.style.width = `${pct}%`;
+    progressBarFill.classList.toggle('stopping', Boolean(stopping));
+    progressMeta.innerText = `Processed: ${completed} / ${total} · Elapsed: ${formatDuration(elapsedSec)} · ETA: ${formatDuration(etaSec)} · Status: ${status}`;
+
+    if (mode === 'bulk') {
+      bulkProgressValue.innerText = `${completed} / ${total}`;
+      bulkTimeValue.innerText = formatDuration(elapsedSec);
+      bulkEtaValue.innerText = formatDuration(etaSec);
     }
   }
 
-  function updateThemeBtnText(theme) {
-    themeToggleBtn.innerText = theme === 'light' ? 'Dark Theme' : 'Light Theme';
+  function updateLiveProgressTick() {
+    if (!scanContext.total) return;
+    updateProgressUI(scanContext.completed, scanContext.total, scanContext.status, scanContext.stopping, scanContext.mode);
   }
 
-  function handleThemeToggle() {
+  function updateDomainCounter() {
+    const count = domainInput.value.split('\n').map(l => l.trim()).filter(l => l).length;
+    domainCountChip.innerText = `${count} ${count === 1 ? 'domain' : 'domains'}`;
+  }
+
+  function setModeByIndex(index) {
+    const standard = index === 0;
+    standardModeView.classList.toggle('hidden-view', !standard);
+    bulkModeView.classList.toggle('hidden-view', standard);
+    standardLoadGroup.classList.toggle('hidden-view', !standard);
+    bulkLoadGroup.classList.toggle('hidden-view', standard);
+    standardConcurrencyWrap.classList.toggle('hidden-view', !standard);
+    bulkConcurrencyWrap.classList.toggle('hidden-view', standard);
+    checkBtn.classList.toggle('hidden-view', !standard);
+    stopBtn.style.display = 'none';
+    bulkCheckBtn.classList.toggle('hidden-view', standard);
+    bulkStopBtn.style.display = 'none';
+
+    standardModeBtn.classList.toggle('active', standard);
+    bulkModeBtn.classList.toggle('active', !standard);
+    standardModeBtn.setAttribute('aria-selected', String(standard));
+    bulkModeBtn.setAttribute('aria-selected', String(!standard));
+  }
+
+  themeToggleBtn.addEventListener('click', () => {
     currentTheme = currentTheme === 'light' ? 'dark' : 'light';
     localStorage.setItem('theme', currentTheme);
     applyTheme(currentTheme);
-    updateThemeBtnText(currentTheme);
-  }
-  themeToggleBtn.addEventListener('click', handleThemeToggle);
+  });
+
+  standardModeBtn.addEventListener('click', () => {
+    if (isScanning) return;
+    modeIndex = 0;
+    setModeByIndex(modeIndex);
+  });
+
+  bulkModeBtn.addEventListener('click', () => {
+    if (isScanning) return;
+    modeIndex = 1;
+    setModeByIndex(modeIndex);
+  });
+
+  standardConcurrencyInput.addEventListener('change', () => {
+    const value = clampConcurrency(standardConcurrencyInput.value);
+    standardConcurrencyInput.value = String(value);
+    writeConcurrency('standard', value);
+  });
+
+  standardConcurrencyInput.addEventListener('blur', () => {
+    const value = clampConcurrency(standardConcurrencyInput.value);
+    standardConcurrencyInput.value = String(value);
+    writeConcurrency('standard', value);
+  });
+
+  bulkConcurrencyInput.addEventListener('change', () => {
+    const value = clampConcurrency(bulkConcurrencyInput.value);
+    bulkConcurrencyInput.value = String(value);
+    writeConcurrency('bulk', value);
+  });
+
+  bulkConcurrencyInput.addEventListener('blur', () => {
+    const value = clampConcurrency(bulkConcurrencyInput.value);
+    bulkConcurrencyInput.value = String(value);
+    writeConcurrency('bulk', value);
+  });
+
+  domainInput.addEventListener('input', updateDomainCounter);
 
   loadFileBtn.addEventListener('click', () => fileInput.click());
   loadCsvBtn.addEventListener('click', () => csvFileInput.click());
@@ -165,8 +296,9 @@ function initPopup() {
     const reader = new FileReader();
     reader.onload = (event) => {
       domainInput.value = event.target.result;
+      updateDomainCounter();
       const count = domainInput.value.split('\n').map(l => l.trim()).filter(l => l).length;
-      statusText.innerText = `Loaded ${count} domains from file`;
+      updateProgressUI(0, 0, `Loaded ${count} domains from file`, false, 'standard');
       fileInput.value = '';
     };
     reader.readAsText(file);
@@ -192,7 +324,8 @@ function initPopup() {
 
       const domains = Array.from(domainSet);
       domainInput.value = domains.join('\n');
-      statusText.innerText = `Loaded ${domains.length} domains from CSV`;
+      updateDomainCounter();
+      updateProgressUI(0, 0, `Loaded ${domains.length} domains from CSV`, false, 'standard');
       csvFileInput.value = '';
     };
     reader.readAsText(file);
@@ -200,7 +333,9 @@ function initPopup() {
 
   stopBtn.addEventListener('click', () => {
     isScanning = false;
-    statusText.innerText = 'Stopping after current batch...';
+    scanContext.status = 'Stopping after current batch';
+    scanContext.stopping = true;
+    updateLiveProgressTick();
     stopBtn.disabled = true;
   });
 
@@ -210,12 +345,15 @@ function initPopup() {
     const fileType = fileTypeSelect.value;
 
     if (lines.length === 0) {
-      statusText.innerText = 'List is empty!';
+      updateProgressUI(0, 0, 'List is empty!', false, 'standard');
       return;
     }
 
+    const batchSize = clampConcurrency(readConcurrency('standard'));
+    standardConcurrencyInput.value = String(batchSize);
+    writeConcurrency('standard', batchSize);
+
     isScanning = true;
-    modeToggleBtn.disabled = true;
     results = [];
     tableBody.innerHTML = '';
     downloadBtn.style.display = 'none';
@@ -223,19 +361,20 @@ function initPopup() {
     checkBtn.style.display = 'none';
     stopBtn.style.display = 'block';
     stopBtn.disabled = false;
+    standardModeBtn.disabled = true;
+    bulkModeBtn.disabled = true;
     loadFileBtn.disabled = true;
     loadCsvBtn.disabled = true;
     domainInput.disabled = true;
     fileTypeSelect.disabled = true;
+    standardConcurrencyInput.disabled = true;
 
     let completed = 0;
-    progressText.innerText = `0/${lines.length}`;
-
-    const batchSize = 10;
+    resetProgressTracking('standard', lines.length, 'Processing');
 
     for (let i = 0; i < lines.length; i += batchSize) {
       if (!isScanning) {
-        statusText.innerText = 'Stopped by user';
+        scanContext.status = 'Stopped by user';
         break;
       }
 
@@ -248,25 +387,37 @@ function initPopup() {
         completed++;
       });
 
-      progressText.innerText = `${completed}/${lines.length}`;
+      recordBatchTiming(completed);
+      scanContext.completed = completed;
+      scanContext.status = 'Processing';
+      updateLiveProgressTick();
 
       if (isScanning && (i + batchSize < lines.length)) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
     }
 
-    if (isScanning) statusText.innerText = 'Completed!';
+    const completedAll = completed === lines.length && scanContext.status !== 'Stopped by user';
+    if (completedAll) {
+      scanContext.status = 'Completed';
+      scanContext.stopping = false;
+      updateProgressUI(lines.length, lines.length, 'Completed', false, 'standard');
+    } else {
+      updateProgressUI(completed, lines.length, scanContext.status, true, 'standard');
+    }
 
     isScanning = false;
-    modeToggleBtn.disabled = false;
+    standardModeBtn.disabled = false;
+    bulkModeBtn.disabled = false;
     checkBtn.style.display = 'block';
     stopBtn.style.display = 'none';
     loadFileBtn.disabled = false;
     loadCsvBtn.disabled = false;
     domainInput.disabled = false;
     fileTypeSelect.disabled = false;
+    standardConcurrencyInput.disabled = false;
 
-    if (results.length > 0) downloadBtn.style.display = 'block';
+    if (results.length > 0) downloadBtn.style.display = 'inline-flex';
   }
 
   function handleDownloadClick() {
@@ -295,6 +446,7 @@ function initPopup() {
     bulkFileStatus.innerText = 'No file selected';
     bulkProgressValue.innerText = '0 / 0';
     bulkTimeValue.innerText = '00:00';
+    bulkEtaValue.innerText = '00:00';
     bulkFileInput.value = '';
   }
 
@@ -349,21 +501,16 @@ function initPopup() {
       bulkFileStatus.innerText = `File loaded: ${bulkLines.length} domains ready.`;
       bulkProgressValue.innerText = `0 / ${bulkLines.length}`;
       bulkTimeValue.innerText = '00:00';
+      bulkEtaValue.innerText = '00:00';
       bulkCheckBtn.disabled = bulkLines.length === 0;
       bulkDownloadBtn.style.display = 'none';
       bulkDownloadTxtBtn.style.display = 'none';
       bulkFileInput.value = '';
+      updateProgressUI(0, bulkLines.length, 'Ready', false, 'bulk');
     };
 
     reader.readAsText(file);
   });
-
-  function updateBulkTimer() {
-    const diff = Math.floor((Date.now() - bulkStartTime) / 1000);
-    const m = String(Math.floor(diff / 60)).padStart(2, '0');
-    const s = String(diff % 60).padStart(2, '0');
-    bulkTimeValue.innerText = `${m}:${s}`;
-  }
 
   function buildBulkHeader(checkType, includeStatus) {
     if (checkType === 'both') {
@@ -379,6 +526,14 @@ function initPopup() {
     return 'File URL,Lines';
   }
 
+  bulkStopBtn.addEventListener('click', () => {
+    isScanning = false;
+    scanContext.status = 'Stopping after current batch';
+    scanContext.stopping = true;
+    updateLiveProgressTick();
+    bulkStopBtn.disabled = true;
+  });
+
   async function handleBulkCheckClick() {
     const fileType = bulkFileTypeSelect.value;
     const total = bulkLines.length;
@@ -386,8 +541,11 @@ function initPopup() {
 
     if (total === 0) return;
 
+    const batchSize = clampConcurrency(readConcurrency('bulk'));
+    bulkConcurrencyInput.value = String(batchSize);
+    writeConcurrency('bulk', batchSize);
+
     isScanning = true;
-    modeToggleBtn.disabled = true;
     bulkResultsArray = [buildBulkHeader(fileType, includeStatus)];
     bulkDownloadBtn.style.display = 'none';
     bulkDownloadTxtBtn.style.display = 'none';
@@ -395,23 +553,27 @@ function initPopup() {
     bulkCheckBtn.style.display = 'none';
     bulkStopBtn.style.display = 'block';
     bulkStopBtn.disabled = false;
+    standardModeBtn.disabled = true;
+    bulkModeBtn.disabled = true;
     bulkLoadFileBtn.disabled = true;
     bulkInputTypeSelect.disabled = true;
     bulkFileTypeSelect.disabled = true;
     bulkIncludeStatus.disabled = true;
+    bulkConcurrencyInput.disabled = true;
+    fileTypeSelect.disabled = true;
 
     bulkFileStatus.innerText = 'Processing...';
-    bulkProgressValue.innerText = `0 / ${total}`;
 
     bulkStartTime = Date.now();
-    bulkTimerInterval = setInterval(updateBulkTimer, 1000);
+    resetProgressTracking('bulk', total, 'Processing');
+    bulkTimerInterval = setInterval(updateLiveProgressTick, 1000);
 
     let completed = 0;
-    const batchSize = 15;
 
     for (let i = 0; i < total; i += batchSize) {
       if (!isScanning) {
         bulkFileStatus.innerText = 'Stopped by user.';
+        scanContext.status = 'Stopped by user';
         break;
       }
 
@@ -467,7 +629,10 @@ function initPopup() {
         completed++;
       });
 
-      bulkProgressValue.innerText = `${completed} / ${total}`;
+      recordBatchTiming(completed);
+      scanContext.completed = completed;
+      scanContext.status = 'Processing';
+      updateLiveProgressTick();
 
       if (isScanning && (i + batchSize < total)) {
         await new Promise(resolve => setTimeout(resolve, 50));
@@ -475,23 +640,33 @@ function initPopup() {
     }
 
     clearInterval(bulkTimerInterval);
+    bulkTimerInterval = null;
 
-    if (isScanning) {
+    const completedAll = completed === total && scanContext.status !== 'Stopped by user';
+    if (completedAll) {
       bulkFileStatus.innerText = 'Completed successfully!';
+      scanContext.status = 'Completed';
+      scanContext.stopping = false;
+      updateProgressUI(total, total, 'Completed', false, 'bulk');
+    } else {
+      updateProgressUI(completed, total, scanContext.status, true, 'bulk');
     }
 
     isScanning = false;
-    modeToggleBtn.disabled = false;
+    standardModeBtn.disabled = false;
+    bulkModeBtn.disabled = false;
     bulkCheckBtn.style.display = 'block';
     bulkStopBtn.style.display = 'none';
     bulkLoadFileBtn.disabled = false;
     bulkInputTypeSelect.disabled = false;
     bulkFileTypeSelect.disabled = false;
     bulkIncludeStatus.disabled = false;
+    bulkConcurrencyInput.disabled = false;
+    fileTypeSelect.disabled = false;
 
     if (bulkResultsArray.length > 1) {
-      bulkDownloadBtn.style.display = 'block';
-      bulkDownloadTxtBtn.style.display = 'block';
+      bulkDownloadBtn.style.display = 'inline-flex';
+      bulkDownloadTxtBtn.style.display = 'inline-flex';
     }
   }
 
@@ -613,6 +788,15 @@ function initPopup() {
     };
   }
 
+  function getBadgeMarkup(res) {
+    const icon = res.cssClass === 'valid'
+      ? '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.6 11.2 3.4 8l1.1-1.1 2.1 2.1 4.9-4.9L12.6 5z"/></svg>'
+      : res.cssClass === 'empty'
+        ? '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.5" fill="currentColor"/></svg>'
+        : '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="m4.4 3.3 4 4 4-4 1.1 1.1-4 4 4 4-1.1 1.1-4-4-4 4-1.1-1.1 4-4-4-4z"/></svg>';
+    return `<span class="status-badge ${res.cssClass}">${icon}<span>${res.status}</span></span>`;
+  }
+
   function addResultToTable(res, tableBodyElement) {
     const tr = document.createElement('tr');
     const urlCell = res.url !== '-'
@@ -621,7 +805,7 @@ function initPopup() {
 
     tr.innerHTML = `
       <td class="col-url">${urlCell}</td>
-      <td class="col-status ${res.cssClass}">${res.status}</td>
+      <td class="col-status">${getBadgeMarkup(res)}</td>
       <td class="col-lines">${res.lines}</td>
     `;
     tableBodyElement.appendChild(tr);
