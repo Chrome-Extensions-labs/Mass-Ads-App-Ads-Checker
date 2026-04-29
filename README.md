@@ -7,7 +7,7 @@ A browser-native logging and validation toolkit for high-volume `ads.txt` / `app
 [![Chrome Store](https://img.shields.io/badge/platform-Chrome_Extension-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white)](https://chromewebstore.google.com/search/OstinUA)
 [![Chrome Portfolio](https://img.shields.io/badge/Chrome_Web_Store-Portfolio-34A853?style=for-the-badge&logo=google-chrome&logoColor=white)](https://ostinua.github.io/Chrome-Web-Store_Developer-List/)
 
-[![Version](https://img.shields.io/badge/version-2.7.1-30BA8F?style=for-the-badge)](./manifest.json)
+[![Version](https://img.shields.io/badge/version-2.7.2-30BA8F?style=for-the-badge)](./manifest.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1f6feb?style=for-the-badge)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-ff9800?style=for-the-badge)](./manifest.json)
 
@@ -80,6 +80,7 @@ AdOps-Txt-Scanner/
 
 2. Deterministic probing strategy
    - Ordered URL fallback reduces false negatives.
+   - `https://www.<domain>` is tried first because most public sites canonicalize to the `www` host; trying apex first wastes a roundtrip on every redirect-to-www site.
    - Fast-exit behavior returns immediately on first valid textual response.
 
 3. Lightweight structured logging model
@@ -89,6 +90,7 @@ AdOps-Txt-Scanner/
      - `lines`
      - `url`
      - `cssClass`
+     - `details` (only for `both` mode: structured `ads` and `appAds` sub-results)
    - This schema is mirrored in UI rows and CSV output for consistency.
 
 4. Defensive parsing model
@@ -234,7 +236,7 @@ const url = URL.createObjectURL(blob);
 ### Runtime Options
 
 - `fileTypeSelect`
-  - Values: `ads.txt` or `app-ads.txt`.
+  - Values: `ads.txt`, `app-ads.txt`, `both`, `url`.
   - Effect: Changes endpoint suffix used in URL probing.
 
 - `concurrency.standard` (`localStorage`)
@@ -246,8 +248,8 @@ const url = URL.createObjectURL(blob);
   - Effect: Controls Bulk Mode parallel request count.
 
 - Request timeout
-  - Current default: `7000` ms using `AbortController`.
-  - Effect: Prevents long-hanging network calls.
+  - Current default: `15000` ms using `AbortController` (`REQUEST_TIMEOUT_MS`).
+  - Effect: Prevents long-hanging network calls. Tuned to tolerate slow CDNs and HTTP fallback variants without false `Error` rows.
 
 ### Environment Variables (`.env`)
 

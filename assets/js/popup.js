@@ -6,9 +6,23 @@
  * @property {number} lines
  * @property {string} url
  * @property {"valid"|"empty"|"error"} cssClass
+ * @property {{ads: SingleFileResult, appAds: SingleFileResult}} [details]
+ *
+ * @typedef {Object} SingleFileResult
+ * @property {"Valid"|"Empty File"|"Error"} status
+ * @property {number} lines
+ * @property {string} url
  */
 
+// Per-attempt request timeout in ms.
+// Kept generous because slow CDNs and HTTP fallbacks need real time;
+// short timeouts produce false "Error" rows even when the file exists.
+const REQUEST_TIMEOUT_MS = 15000;
+
 function normalizeDomain(raw) {
+  // Strip protocol, leading www, trailing slash, quotes, and any path segment.
+  // Note: a path like "/something" will be discarded silently. Inputs such as
+  // "https://twitter.com/degraman" become "twitter.com" on purpose.
   return raw.trim()
     .replace(/^["']|["']$/g, '')
     .replace(/^https?:\/\//i, '')
@@ -19,11 +33,14 @@ function normalizeDomain(raw) {
 }
 
 function buildProbeUrls(domain, fileType) {
+  // Order matters: most public sites canonicalize to https://www.<domain>.
+  // Trying apex first wastes a roundtrip on every redirect-to-www site and
+  // increases the chance of false negatives on flaky DNS for the apex name.
   return [
-    `https://${domain}/${fileType}`,
     `https://www.${domain}/${fileType}`,
-    `http://${domain}/${fileType}`,
-    `http://www.${domain}/${fileType}`
+    `https://${domain}/${fileType}`,
+    `http://www.${domain}/${fileType}`,
+    `http://${domain}/${fileType}`
   ];
 }
 
@@ -31,14 +48,14 @@ async function checkSingleFile(domain, fileType) {
   const urls = buildProbeUrls(domain, fileType);
 
   for (const url of urls) {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
     try {
-      const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 7000);
       const res = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
-      clearTimeout(tid);
 
       if (res.status === 200) {
         const text = await res.text();
+        // Skip soft-404 / SPA shells served as 200.
         if (text.toLowerCase().includes('<html') || text.toLowerCase().includes('<!doctype')) {
           continue;
         }
@@ -50,6 +67,9 @@ async function checkSingleFile(domain, fileType) {
         };
       }
     } catch {
+      // Network error, abort, or DNS failure — try the next URL variant.
+    } finally {
+      clearTimeout(tid);
     }
   }
 
@@ -582,38 +602,31 @@ function initPopup() {
 
       batchResults.forEach(res => {
         if (fileType === 'both') {
+          // Read structured sub-results directly instead of regex-parsing the
+          // human-readable status string back into fields.
           const normalized = normalizeDomain(res.domain);
           const rowDomain = normalized || res.domain;
-          const adsMatch = res.status.match(/ads:\s([^/]+?)(?:\s\/|$)/);
-          const appAdsMatch = res.status.match(/app-ads:\s(.+)$/);
-
-          const adsSegment = adsMatch ? adsMatch[1].trim() : 'Error';
-          const appAdsSegment = appAdsMatch ? appAdsMatch[1].trim() : 'Error';
-
-          const adsStatusMatch = adsSegment.match(/^(Valid|Empty File|Error)/);
-          const appAdsStatusMatch = appAdsSegment.match(/^(Valid|Empty File|Error)/);
-          const adsLinesMatch = adsSegment.match(/\((\d+)\)/);
-          const appAdsLinesMatch = appAdsSegment.match(/\((\d+)\)/);
-
-          const adsStatus = adsStatusMatch ? adsStatusMatch[1] : 'Error';
-          const appAdsStatus = appAdsStatusMatch ? appAdsStatusMatch[1] : 'Error';
-          const adsLines = adsLinesMatch ? Number(adsLinesMatch[1]) : 0;
-          const appAdsLines = appAdsLinesMatch ? Number(appAdsLinesMatch[1]) : 0;
+          const adsResult = res.details && res.details.ads
+            ? res.details.ads
+            : { status: 'Error', lines: 0, url: '-' };
+          const appAdsResult = res.details && res.details.appAds
+            ? res.details.appAds
+            : { status: 'Error', lines: 0, url: '-' };
 
           if (includeStatus) {
             bulkResultsArray.push(
               [
                 escapeCsvCell(rowDomain),
-                escapeCsvCell(adsStatus),
-                escapeCsvCell(appAdsStatus)
+                escapeCsvCell(adsResult.status),
+                escapeCsvCell(appAdsResult.status)
               ].join(',')
             );
           } else {
             bulkResultsArray.push(
               [
                 escapeCsvCell(rowDomain),
-                adsLines,
-                appAdsLines
+                adsResult.lines,
+                appAdsResult.lines
               ].join(',')
             );
           }
@@ -703,11 +716,10 @@ function initPopup() {
   async function checkDomainSmart(rawDomain, fileType) {
     if (fileType === 'url') {
       const exactUrl = /^(https?:\/\/)/i.test(rawDomain) ? rawDomain : `https://${rawDomain}`;
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
       try {
-        const ctrl = new AbortController();
-        const tid = setTimeout(() => ctrl.abort(), 7000);
         const res = await fetch(exactUrl, { signal: ctrl.signal, cache: 'no-store' });
-        clearTimeout(tid);
 
         if (res.status === 200) {
           const text = await res.text();
@@ -724,6 +736,9 @@ function initPopup() {
           };
         }
       } catch {
+        // Fall through to the generic error result below.
+      } finally {
+        clearTimeout(tid);
       }
 
       return {
@@ -768,12 +783,14 @@ function initPopup() {
 
       const resolvedUrl = adsResult.url !== '-' ? adsResult.url : (appAdsResult.url !== '-' ? appAdsResult.url : '-');
 
+      // Expose structured sub-results so callers don't have to parse `status`.
       return {
         domain: rawDomain,
         status,
         lines: totalLines,
         url: resolvedUrl,
-        cssClass
+        cssClass,
+        details: { ads: adsResult, appAds: appAdsResult }
       };
     }
 
