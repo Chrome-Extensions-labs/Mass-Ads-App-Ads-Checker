@@ -65,10 +65,11 @@ AdOps-Txt-Scanner/
 ├── index.html           # UI markup + CSS theme tokens
 ├── assets/
 │   ├── css/popup.css   # Popup stylesheet and theme tokens
-│   └── js/popup.js     # Scanner logic, parsing, progress, CSV export
+│   ├── js/popup.js     # Interface, progress, and export logic
+│   └── js/scan-core.js # Input parsing and network probes
 ├── icons/
 │   └── icon128.png      # Extension icon asset
-├── LICENSE              # MIT license text
+├── LICENSE              # GPL-3.0 license text
 └── README.md            # Project documentation
 ```
 
@@ -99,7 +100,7 @@ AdOps-Txt-Scanner/
 
 ```mermaid
 flowchart TD
-    A[Domain Input List] --> B[Batch Scheduler]
+    A[Domain Input List] --> B[Worker Queue]
     B --> C[URL Probe Strategy]
     C --> D{HTTP 200 + Non-HTML?}
     D -- No --> E[Try Next Variant]
@@ -224,7 +225,7 @@ console.log(validCount); // 2
 let csv = 'File URL,Status,Lines\n';
 results.forEach((r) => {
   const rowUrl = r.url !== '-' ? r.url : r.domain;
-  csv += `${rowUrl},${r.status},${r.lines}\n`;
+  csv += [rowUrl, r.status, r.lines].map(escapeCsvCell).join(',') + '\n';
 });
 
 const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -241,15 +242,25 @@ const url = URL.createObjectURL(blob);
 
 - `concurrency.standard` (`localStorage`)
   - Default: `10` (range `1-20`, clamped on blur and run).
-  - Effect: Controls Standard Mode parallel request count.
+  - Effect: Controls the number of domains checked concurrently in Standard Mode.
 
 - `concurrency.bulk` (`localStorage`)
   - Default: `15` (range `1-20`, clamped on blur and run).
-  - Effect: Controls Bulk Mode parallel request count.
+  - Effect: Controls the number of domains checked concurrently in Bulk Mode.
 
 - Request timeout
   - Current default: `15000` ms using `AbortController` (`REQUEST_TIMEOUT_MS`).
   - Effect: Prevents long-hanging network calls. Tuned to tolerate slow CDNs and HTTP fallback variants without false `Error` rows.
+
+- The combined file mode can make two requests per domain concurrently. Stop prevents new domains from starting; active checks finish first and can take multiple timeout periods while trying fallbacks.
+- `Empty File` means the response contains no recognized seller records, even if it contains comments or other text.
+- Responses larger than 5 MiB are rejected. Requests omit cookies and other credentials, and may follow redirects. HTTP fallback is unencrypted.
+- CSV import reads the first column, supports quoted fields and an optional domain/URL header, and preserves full URLs for Exact URL mode. CSV exports escape spreadsheet formulas; values beginning with formula characters are prefixed with an apostrophe.
+- The extension requires access to arbitrary HTTP(S) hosts to check the domains supplied by the user. Only scan trusted input: URLs and redirects can reach local or private network services accessible to the browser.
+
+### Tests
+
+Run `node --test tests/*.test.js` with Node.js 20 or later. No dependencies are required.
 
 ### Environment Variables (`.env`)
 

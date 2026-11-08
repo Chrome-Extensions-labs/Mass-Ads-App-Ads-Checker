@@ -39,12 +39,12 @@
     </div>
 
     <div id="standardConcurrencyWrap" class="control-group concurrency-wrap">
-      <label for="standardConcurrencyInput" title="Number of domains checked at the same time. Higher values are faster but may cause memory pressure or trigger anti-bot rate limits on some networks. Recommended: 5–15.">Parallel requests <span class="hint">?</span></label>
+      <label for="standardConcurrencyInput" title="Number of domains checked at the same time. Higher values are faster but may cause memory pressure or trigger anti-bot rate limits on some networks. Recommended: 5–15.">Parallel domains <span class="hint">?</span></label>
       <input id="standardConcurrencyInput" type="number" min="1" max="20" step="1" inputmode="numeric">
     </div>
 
     <div id="bulkConcurrencyWrap" class="control-group concurrency-wrap hidden-view">
-      <label for="bulkConcurrencyInput" title="Number of domains checked at the same time. Higher values are faster but may cause memory pressure or trigger anti-bot rate limits on some networks. Recommended: 5–15.">Parallel requests <span class="hint">?</span></label>
+      <label for="bulkConcurrencyInput" title="Number of domains checked at the same time. Higher values are faster but may cause memory pressure or trigger anti-bot rate limits on some networks. Recommended: 5–15.">Parallel domains <span class="hint">?</span></label>
       <input id="bulkConcurrencyInput" type="number" min="1" max="20" step="1" inputmode="numeric">
     </div>
 
@@ -157,6 +157,7 @@
     </a>
   </div>
 
+  <script src="assets/js/scan-core.js"></script>
   <script src="assets/js/popup.js"></script>
 </body>
 </html>
